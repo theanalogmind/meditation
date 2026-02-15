@@ -638,9 +638,9 @@ function openDB() {
     req.onerror = () => reject(req.error);
   });
 }
-async function storeAudio(key, ab) {
+async function storeAudio(key, ab, mimeType) {
   const db = await openDB();
-  return new Promise((res, rej) => { const tx = db.transaction('audio','readwrite'); tx.objectStore('audio').put(ab,key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
+  return new Promise((res, rej) => { const tx = db.transaction('audio','readwrite'); tx.objectStore('audio').put({data: ab, mime: mimeType}, key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
 }
 async function loadAudio(key) {
   const db = await openDB();
@@ -653,26 +653,30 @@ async function deleteAudio(key) {
 function playAudioBuffer(key) {
   return new Promise(async (resolve) => {
     try {
-      const buffer = await loadAudio(key);
-      if (!buffer) { resolve(); return; }
-      const blob = new Blob([buffer]);
+      const stored = await loadAudio(key);
+      if (!stored) { resolve(); return; }
+      // Support both old format (raw ArrayBuffer) and new format ({data, mime})
+      const ab = stored.data || stored;
+      const mime = stored.mime || 'audio/mpeg';
+      const blob = new Blob([ab], { type: mime });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       state.currentAudio = audio;
       audio.onended = () => { URL.revokeObjectURL(url); state.currentAudio = null; resolve(); };
-      audio.onerror = () => { URL.revokeObjectURL(url); state.currentAudio = null; resolve(); };
-      audio.play().catch(() => resolve());
-    } catch { resolve(); }
+      audio.onerror = (e) => { console.error('Audio error:', e); URL.revokeObjectURL(url); state.currentAudio = null; resolve(); };
+      audio.play().catch((e) => { console.error('Play failed:', e); resolve(); });
+    } catch(e) { console.error('playAudioBuffer error:', e); resolve(); }
   });
 }
 
 // iOS requires audio to be primed during a user gesture.
-// We pre-create Audio elements on tap and play them later.
 async function primeAudio(key) {
   try {
-    const buffer = await loadAudio(key);
-    if (!buffer) return null;
-    const blob = new Blob([buffer]);
+    const stored = await loadAudio(key);
+    if (!stored) return null;
+    const ab = stored.data || stored;
+    const mime = stored.mime || 'audio/mpeg';
+    const blob = new Blob([ab], { type: mime });
     const url = URL.createObjectURL(blob);
     const audio = new Audio();
     audio.src = url;
@@ -685,7 +689,7 @@ async function primeAudio(key) {
     audio.volume = 1;
     audio._blobUrl = url;
     return audio;
-  } catch { return null; }
+  } catch(e) { console.error('primeAudio error:', e); return null; }
 }
 
 function playPrimedAudio(audio) {
@@ -779,7 +783,7 @@ function setupAudio(upBtn, fileIn, nameEl, rmBtn, preBtn, key, field) {
   $(upBtn).addEventListener('click', () => $(fileIn).click());
   $(fileIn).addEventListener('change', async (e) => {
     const file = e.target.files[0]; if (!file) return;
-    await storeAudio(key, await file.arrayBuffer());
+    await storeAudio(key, await file.arrayBuffer(), file.type || 'audio/mpeg');
     state[field] = file.name; $(nameEl).textContent = file.name; $(nameEl).classList.remove('empty');
     $(rmBtn).classList.add('visible'); $(preBtn).classList.add('visible'); saveSettings();
   });
