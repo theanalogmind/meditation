@@ -665,6 +665,46 @@ function playAudioBuffer(key) {
     } catch { resolve(); }
   });
 }
+
+// iOS requires audio to be primed during a user gesture.
+// We pre-create Audio elements on tap and play them later.
+async function primeAudio(key) {
+  try {
+    const buffer = await loadAudio(key);
+    if (!buffer) return null;
+    const blob = new Blob([buffer]);
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio();
+    audio.src = url;
+    audio.preload = 'auto';
+    // Unlock audio on iOS by playing then immediately pausing
+    audio.volume = 0;
+    try { await audio.play(); } catch {}
+    audio.pause();
+    audio.currentTime = 0;
+    audio.volume = 1;
+    audio._blobUrl = url;
+    return audio;
+  } catch { return null; }
+}
+
+function playPrimedAudio(audio) {
+  return new Promise((resolve) => {
+    if (!audio) { resolve(); return; }
+    state.currentAudio = audio;
+    audio.onended = () => { 
+      if (audio._blobUrl) URL.revokeObjectURL(audio._blobUrl);
+      state.currentAudio = null; 
+      resolve(); 
+    };
+    audio.onerror = () => { 
+      if (audio._blobUrl) URL.revokeObjectURL(audio._blobUrl);
+      state.currentAudio = null; 
+      resolve(); 
+    };
+    audio.play().catch(() => resolve());
+  });
+}
 function stopCurrentAudio() { if (state.currentAudio) { state.currentAudio.pause(); state.currentAudio = null; } }
 
 // ── Format ──
@@ -760,6 +800,10 @@ async function startSession() {
   playIcon.style.display = 'none'; stopIcon.style.display = 'block';
   actionBtn.classList.add('running'); durationSelector.style.display = 'none';
 
+  // Prime audio immediately during user gesture (iOS requirement)
+  const introAudio = await primeAudio('intro');
+  const outroAudio = await primeAudio('outro');
+
   const prepSec = state.prepTime; // already seconds
   const medSec = state.duration * 60;
 
@@ -773,7 +817,7 @@ async function startSession() {
 
   state.phase = 'intro'; timerPhase.textContent = 'Intro';
   setProgress(0); timerTime.textContent = fmt(medSec); timerSub.textContent = '';
-  await playAudioBuffer('intro');
+  await playPrimedAudio(introAudio);
   if (!state.running) return;
 
   state.phase = 'meditation'; timerPhase.textContent = 'Meditation';
@@ -785,7 +829,7 @@ async function startSession() {
 
   state.phase = 'outro'; timerPhase.textContent = 'Outro';
   setProgress(1); timerTime.textContent = '00:00';
-  await playAudioBuffer('outro');
+  await playPrimedAudio(outroAudio);
   stopSession(true);
 }
 
