@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1714">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Stillpoint</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-deep: #0f0d0b;
+  --bg-primary: #1a1714;
+  --bg-elevated: #252220;
+  --bg-surface: #2e2b28;
+  --border: #3a3633;
+  --text-primary: #e8e0d6;
+  --text-secondary: #9e958a;
+  --text-muted: #6b6359;
+  --accent: #c4a882;
+  --accent-dim: #8a7a64;
+  --accent-glow: rgba(196, 168, 130, 0.15);
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --safe-top: env(safe-area-inset-top, 20px);
+  --safe-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+
+/* Navigation */
+.nav {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  padding: 12px 20px 8px;
+  flex-shrink: 0;
+}
+.nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 20px;
+}
+.nav-btn.active {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+.nav-btn:not(.active):hover {
+  color: var(--text-secondary);
+}
+
+/* Screens */
+.screen {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px 24px;
+  -webkit-overflow-scrolling: touch;
+}
+.screen.active { display: flex; flex-direction: column; }
+.screen::-webkit-scrollbar { width: 0; }
+
+/* Timer Screen */
+.timer-screen {
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+}
+
+.timer-circle {
+  position: relative;
+  width: 260px;
+  height: 260px;
+}
+.timer-ring {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.timer-ring-bg {
+  fill: none;
+  stroke: var(--bg-surface);
+  stroke-width: 2;
+}
+.timer-ring-progress {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 785.4;
+  stroke-dashoffset: 785.4;
+  transition: stroke-dashoffset 0.5s ease;
+}
+.timer-ring-progress.prep {
+  stroke: var(--accent-dim);
+  opacity: 0.6;
+}
+
+.timer-display {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+.timer-phase {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  min-height: 16px;
+}
+.timer-time {
+  font-family: var(--font-display);
+  font-size: 56px;
+  font-weight: 300;
+  color: var(--text-primary);
+  line-height: 1;
+  letter-spacing: 2px;
+}
+.timer-time-sub {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  letter-spacing: 1px;
+}
+
+/* Duration Selector */
+.duration-selector { text-align: center; }
+.duration-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.duration-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: center;
+}
+.duration-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-family: var(--font-display);
+}
+.duration-btn:active {
+  background: var(--bg-surface);
+  border-color: var(--accent-dim);
+}
+.duration-value {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 300;
+  color: var(--text-primary);
+  min-width: 60px;
+  text-align: center;
+}
+.duration-unit {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+}
+
+/* Action Button */
+.action-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+.action-btn:active {
+  background: var(--accent-glow);
+  transform: scale(0.95);
+}
+.action-btn svg { width: 24px; height: 24px; fill: var(--accent); }
+.action-btn.running { border-color: var(--text-muted); }
+.action-btn.running svg { fill: var(--text-muted); }
+
+/* Stats */
+.stats-screen { padding-top: 20px; }
+.section-header {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--text-primary);
+  margin-bottom: 32px;
+  text-align: center;
+}
+.stat-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 12px;
+}
+.stat-label {
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 300;
+  color: var(--text-primary);
+}
+.stat-value .stat-unit {
+  font-size: 16px;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-weight: 300;
+  margin-left: 4px;
+}
+.stat-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.stat-row .stat-card { margin-bottom: 0; }
+.stat-row .stat-value { font-size: 28px; }
+
+/* Settings */
+.settings-screen { padding-top: 20px; padding-bottom: 40px; }
+.setting-group { margin-bottom: 28px; }
+.setting-label {
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.setting-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.audio-upload { display: flex; align-items: center; gap: 12px; }
+.audio-upload-btn {
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.audio-upload-btn:active { border-color: var(--accent-dim); color: var(--accent); }
+.audio-filename {
+  font-size: 13px; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.audio-filename.empty { color: var(--text-muted); font-style: italic; }
+.audio-remove {
+  flex-shrink: 0; background: none; border: none; color: var(--text-muted);
+  font-size: 18px; cursor: pointer; padding: 4px 8px; display: none;
+}
+.audio-remove.visible { display: block; }
+.audio-preview-btn {
+  flex-shrink: 0; background: none; border: 1px solid var(--border); color: var(--text-muted);
+  width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+  display: none; align-items: center; justify-content: center; font-size: 12px; transition: all 0.2s;
+}
+.audio-preview-btn.visible { display: flex; }
+.audio-preview-btn:active { border-color: var(--accent-dim); color: var(--accent); }
+
+input[type="file"] { display: none; }
+
+.ctrl-row { display: flex; align-items: center; gap: 16px; }
+.ctrl-row .duration-btn { width: 36px; height: 36px; font-size: 18px; }
+.ctrl-value {
+  font-family: var(--font-display); font-size: 24px; font-weight: 300;
+  color: var(--text-primary); min-width: 50px; text-align: center;
+}
+
+.setting-input {
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text-primary); font-family: var(--font-display); font-size: 20px;
+  font-weight: 300; padding: 8px 14px; width: 100px; outline: none;
+  -moz-appearance: textfield;
+}
+.setting-input::-webkit-inner-spin-button,
+.setting-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.setting-input:focus { border-color: var(--accent-dim); }
+.setting-input-row { display: flex; align-items: center; gap: 12px; }
+.setting-input-label { font-size: 13px; color: var(--text-secondary); }
+
+.reset-section { margin-top: 12px; padding-top: 28px; border-top: 1px solid var(--border); }
+.reset-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  font-family: var(--font-body); font-size: 12px; letter-spacing: 1px;
+  padding: 10px 24px; border-radius: 8px; cursor: pointer; transition: all 0.2s; width: 100%;
+}
+.reset-btn:active { border-color: #a04040; color: #c07070; }
+
+/* Backup buttons */
+.backup-btn {
+  flex: 1; background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-secondary);
+  font-family: var(--font-body); font-size: 12px; letter-spacing: 1px; padding: 10px 16px;
+  border-radius: 8px; cursor: pointer; transition: all 0.2s; text-align: center;
+}
+.backup-btn:active { border-color: var(--accent-dim); color: var(--accent); }
+.import-status {
+  font-size: 12px; color: var(--accent); text-align: center; min-height: 0;
+  transition: all 0.3s; margin-bottom: 4px;
+}
+.import-status.error { color: #c07070; }
+.import-status.success { color: #80b080; }
+
+/* Confirmation overlay */
+.confirm-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  z-index: 100; align-items: center; justify-content: center; padding: 24px;
+}
+.confirm-overlay.visible { display: flex; }
+.confirm-box {
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px;
+  padding: 28px 24px; max-width: 320px; width: 100%; text-align: center;
+}
+.confirm-title {
+  font-family: var(--font-display); font-size: 22px; font-weight: 300;
+  color: var(--text-primary); margin-bottom: 12px;
+}
+.confirm-text {
+  font-size: 14px; color: var(--text-secondary); margin-bottom: 24px; line-height: 1.5;
+}
+.confirm-btns { display: flex; gap: 12px; }
+.confirm-btns button {
+  flex: 1; padding: 12px; border-radius: 8px; font-family: var(--font-body);
+  font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;
+}
+.confirm-cancel { background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-secondary); }
+.confirm-danger { background: #3d2020; border: 1px solid #5a3030; color: #e08080; }
+.confirm-danger:active { background: #4a2525; }
+
+/* Animations */
+@keyframes breathe { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+.breathing .timer-ring-progress { animation: breathe 6s ease-in-out infinite; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.screen.active { animation: fadeIn 0.3s ease; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <nav class="nav">
+    <button class="nav-btn active" data-screen="timer">Meditation</button>
+    <button class="nav-btn" data-screen="stats">Statistik</button>
+    <button class="nav-btn" data-screen="settings">Einstellungen</button>
+  </nav>
+
+  <!-- Timer -->
+  <div id="timer" class="screen timer-screen active">
+    <div id="durationSelector" class="duration-selector">
+      <div class="duration-label">Dauer</div>
+      <div class="duration-controls">
+        <button class="duration-btn" id="durDown">−</button>
+        <div>
+          <span class="duration-value" id="durValue">10</span>
+          <div class="duration-unit">Minuten</div>
+        </div>
+        <button class="duration-btn" id="durUp">+</button>
+      </div>
+    </div>
+    <div class="timer-circle">
+      <svg class="timer-ring" viewBox="0 0 260 260">
+        <circle class="timer-ring-bg" cx="130" cy="130" r="125" />
+        <circle class="timer-ring-progress" id="timerProgress" cx="130" cy="130" r="125" />
+      </svg>
+      <div class="timer-display">
+        <div class="timer-phase" id="timerPhase"></div>
+        <div class="timer-time" id="timerTime">10:00</div>
+        <div class="timer-time-sub" id="timerSub"></div>
+      </div>
+    </div>
+    <button class="action-btn" id="actionBtn">
+      <svg id="playIcon" viewBox="0 0 24 24"><polygon points="8,5 20,12 8,19"/></svg>
+      <svg id="stopIcon" viewBox="0 0 24 24" style="display:none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+    </button>
+  </div>
+
+  <!-- Statistik -->
+  <div id="stats" class="screen stats-screen">
+    <div class="section-header">Statistik</div>
+    <div class="stat-card">
+      <div class="stat-label">Gesamt Sessions</div>
+      <div class="stat-value" id="statSessions">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Gesamtzeit</div>
+      <div class="stat-value" id="statTotal">0<span class="stat-unit">min</span></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-label">Ø pro Session</div>
+        <div class="stat-value" id="statAvg">0<span class="stat-unit">min</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Längste Session</div>
+        <div class="stat-value" id="statLongest">0<span class="stat-unit">min</span></div>
+      </div>
+    </div>
+    <div class="stat-row" style="margin-top:12px">
+      <div class="stat-card">
+        <div class="stat-label">Aktuelle Serie</div>
+        <div class="stat-value" id="statCurrent">0<span class="stat-unit">Tage</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Längste Serie</div>
+        <div class="stat-value" id="statBest">0<span class="stat-unit">Tage</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Einstellungen -->
+  <div id="settings" class="screen settings-screen">
+    <div class="section-header">Einstellungen</div>
+
+    <div class="setting-group">
+      <div class="setting-label">Standard Meditationsdauer</div>
+      <div class="setting-card">
+        <div class="ctrl-row">
+          <button class="duration-btn" id="defaultDurDown">−</button>
+          <div>
+            <span class="ctrl-value" id="defaultDurValue">10</span>
+            <div class="duration-unit">Minuten</div>
+          </div>
+          <button class="duration-btn" id="defaultDurUp">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-label">Vorbereitungszeit</div>
+      <div class="setting-card">
+        <div class="ctrl-row">
+          <button class="duration-btn" id="prepDown">−</button>
+          <div>
+            <span class="ctrl-value" id="prepValue">30</span>
+            <div class="duration-unit">Sekunden</div>
+          </div>
+          <button class="duration-btn" id="prepUp">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-label">Intro</div>
+      <div class="setting-card">
+        <div class="audio-upload">
+          <button class="audio-upload-btn" id="introUploadBtn">Auswählen</button>
+          <span class="audio-filename empty" id="introName">Keine Datei</span>
+          <button class="audio-preview-btn" id="introPreview" title="Abspielen">▶</button>
+          <button class="audio-remove" id="introRemove">×</button>
+        </div>
+        <input type="file" id="introFile" accept="audio/*,video/*,.mp3,.m4a,.aac,.wav,.ogg,.mp4,.m4b">
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-label">Outro</div>
+      <div class="setting-card">
+        <div class="audio-upload">
+          <button class="audio-upload-btn" id="outroUploadBtn">Auswählen</button>
+          <span class="audio-filename empty" id="outroName">Keine Datei</span>
+          <button class="audio-preview-btn" id="outroPreview" title="Abspielen">▶</button>
+          <button class="audio-remove" id="outroRemove">×</button>
+        </div>
+        <input type="file" id="outroFile" accept="audio/*,video/*,.mp3,.m4a,.aac,.wav,.ogg,.mp4,.m4b">
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-label">Anfangswerte Statistik</div>
+      <div class="setting-card" style="display:flex; flex-direction:column; gap:14px;">
+        <div class="setting-input-row">
+          <input type="number" class="setting-input" id="initSessions" min="0" value="0">
+          <span class="setting-input-label">Sessions</span>
+        </div>
+        <div class="setting-input-row">
+          <input type="number" class="setting-input" id="initHours" min="0" value="0" style="width:70px;">
+          <span class="setting-input-label">Stunden</span>
+          <input type="number" class="setting-input" id="initMinutes" min="0" max="59" value="0" style="width:70px;">
+          <span class="setting-input-label">Minuten</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="setting-group reset-section">
+      <div class="setting-label">Daten sichern</div>
+      <div style="display:flex; gap:12px; margin-bottom:20px;">
+        <button class="backup-btn" id="exportBtn">Export</button>
+        <button class="backup-btn" id="importBtn">Import</button>
+        <input type="file" id="importFile" accept=".json" style="display:none">
+      </div>
+      <div class="import-status" id="importStatus"></div>
+      <button class="reset-btn" id="resetStats" style="margin-top:16px;">Statistik zurücksetzen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation Dialog -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <div class="confirm-title">Statistik zurücksetzen?</div>
+    <div class="confirm-text">Alle aufgezeichneten Sessions und Serien werden unwiderruflich gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden.</div>
+    <div class="confirm-btns">
+      <button class="confirm-cancel" id="confirmCancel">Abbrechen</button>
+      <button class="confirm-danger" id="confirmDelete">Zurücksetzen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let state = {
+  duration: 10,
+  defaultDuration: 10,
+  prepTime: 30, // in seconds
+  running: false,
+  phase: 'idle',
+  elapsed: 0,
+  totalSeconds: 0,
+  intervalId: null,
+  introName: '',
+  outroName: '',
+  currentAudio: null,
+  initSessions: 0,
+  initHours: 0,
+  initMinutes: 0
+};
+
+const STATS_KEY = 'stillpoint_stats';
+const SETTINGS_KEY = 'stillpoint_settings';
+const $ = id => document.getElementById(id);
+
+// ── Storage ──
+function loadStats() {
+  try { return JSON.parse(localStorage.getItem(STATS_KEY)) || { sessions: [], dates: [] }; }
+  catch { return { sessions: [], dates: [] }; }
+}
+function saveStats(data) { localStorage.setItem(STATS_KEY, JSON.stringify(data)); }
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+    if (s) {
+      state.defaultDuration = s.defaultDuration || 10;
+      state.duration = state.defaultDuration;
+      state.prepTime = s.prepTime ?? 30;
+      state.introName = s.introName || '';
+      state.outroName = s.outroName || '';
+      state.initSessions = s.initSessions || 0;
+      state.initHours = s.initHours || 0;
+      state.initMinutes = s.initMinutes || 0;
+    }
+  } catch {}
+}
+
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+    defaultDuration: state.defaultDuration,
+    prepTime: state.prepTime,
+    introName: state.introName,
+    outroName: state.outroName,
+    initSessions: state.initSessions,
+    initHours: state.initHours,
+    initMinutes: state.initMinutes
+  }));
+}
+
+// ── Audio (IndexedDB) ──
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('StillpointAudio', 1);
+    req.onupgradeneeded = (e) => e.target.result.createObjectStore('audio');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function storeAudio(key, ab) {
+  const db = await openDB();
+  return new Promise((res, rej) => { const tx = db.transaction('audio','readwrite'); tx.objectStore('audio').put(ab,key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
+}
+async function loadAudio(key) {
+  const db = await openDB();
+  return new Promise((res, rej) => { const tx = db.transaction('audio','readonly'); const r = tx.objectStore('audio').get(key); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error); });
+}
+async function deleteAudio(key) {
+  const db = await openDB();
+  return new Promise((res, rej) => { const tx = db.transaction('audio','readwrite'); tx.objectStore('audio').delete(key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
+}
+function playAudioBuffer(key) {
+  return new Promise(async (resolve) => {
+    try {
+      const buffer = await loadAudio(key);
+      if (!buffer) { resolve(); return; }
+      const blob = new Blob([buffer]);
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      state.currentAudio = audio;
+      audio.onended = () => { URL.revokeObjectURL(url); state.currentAudio = null; resolve(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); state.currentAudio = null; resolve(); };
+      audio.play().catch(() => resolve());
+    } catch { resolve(); }
+  });
+}
+function stopCurrentAudio() { if (state.currentAudio) { state.currentAudio.pause(); state.currentAudio = null; } }
+
+// ── Format ──
+function fmt(totalSec) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function fmtHM(totalMin) {
+  const h = Math.floor(totalMin / 60);
+  const m = Math.round(totalMin % 60);
+  if (h > 0 && m > 0) return `${h}<span class="stat-unit">h</span> ${m}<span class="stat-unit">min</span>`;
+  if (h > 0) return `${h}<span class="stat-unit">h</span>`;
+  return `${m}<span class="stat-unit">min</span>`;
+}
+
+// ── Ring ──
+const CIRCUMFERENCE = 2 * Math.PI * 125;
+function setProgress(fraction) { $('timerProgress').style.strokeDashoffset = CIRCUMFERENCE * (1 - fraction); }
+
+const timerTime = $('timerTime');
+const timerPhase = $('timerPhase');
+const timerSub = $('timerSub');
+const actionBtn = $('actionBtn');
+const playIcon = $('playIcon');
+const stopIcon = $('stopIcon');
+const durationSelector = $('durationSelector');
+
+// ── Navigation ──
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    $(btn.dataset.screen).classList.add('active');
+    if (btn.dataset.screen === 'stats') renderStats();
+  });
+});
+
+// ── Duration Controls (Timer) ──
+$('durDown').addEventListener('click', () => { if (state.running) return; state.duration = Math.max(1, state.duration - 1); updateDurationDisplay(); });
+$('durUp').addEventListener('click', () => { if (state.running) return; state.duration = Math.min(180, state.duration + 1); updateDurationDisplay(); });
+function updateDurationDisplay() { $('durValue').textContent = state.duration; timerTime.textContent = fmt(state.duration * 60); }
+
+// ── Default Duration (Settings) ──
+$('defaultDurDown').addEventListener('click', () => {
+  state.defaultDuration = Math.max(1, state.defaultDuration - 1);
+  $('defaultDurValue').textContent = state.defaultDuration;
+  if (!state.running) { state.duration = state.defaultDuration; updateDurationDisplay(); }
+  saveSettings();
+});
+$('defaultDurUp').addEventListener('click', () => {
+  state.defaultDuration = Math.min(180, state.defaultDuration + 1);
+  $('defaultDurValue').textContent = state.defaultDuration;
+  if (!state.running) { state.duration = state.defaultDuration; updateDurationDisplay(); }
+  saveSettings();
+});
+
+// ── Prep Time (seconds, step 5) ──
+$('prepDown').addEventListener('click', () => { state.prepTime = Math.max(0, state.prepTime - 5); $('prepValue').textContent = state.prepTime; saveSettings(); });
+$('prepUp').addEventListener('click', () => { state.prepTime = Math.min(300, state.prepTime + 5); $('prepValue').textContent = state.prepTime; saveSettings(); });
+
+// ── Initial Stats ──
+$('initSessions').addEventListener('change', () => { state.initSessions = Math.max(0, parseInt($('initSessions').value) || 0); $('initSessions').value = state.initSessions; saveSettings(); });
+$('initHours').addEventListener('change', () => { state.initHours = Math.max(0, parseInt($('initHours').value) || 0); $('initHours').value = state.initHours; saveSettings(); });
+$('initMinutes').addEventListener('change', () => { state.initMinutes = Math.max(0, Math.min(59, parseInt($('initMinutes').value) || 0)); $('initMinutes').value = state.initMinutes; saveSettings(); });
+
+// ── Audio Upload ──
+function setupAudio(upBtn, fileIn, nameEl, rmBtn, preBtn, key, field) {
+  $(upBtn).addEventListener('click', () => $(fileIn).click());
+  $(fileIn).addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    await storeAudio(key, await file.arrayBuffer());
+    state[field] = file.name; $(nameEl).textContent = file.name; $(nameEl).classList.remove('empty');
+    $(rmBtn).classList.add('visible'); $(preBtn).classList.add('visible'); saveSettings();
+  });
+  $(rmBtn).addEventListener('click', async () => {
+    await deleteAudio(key); state[field] = ''; $(nameEl).textContent = 'Keine Datei'; $(nameEl).classList.add('empty');
+    $(rmBtn).classList.remove('visible'); $(preBtn).classList.remove('visible'); $(fileIn).value = ''; saveSettings();
+  });
+  $(preBtn).addEventListener('click', () => playAudioBuffer(key));
+}
+setupAudio('introUploadBtn','introFile','introName','introRemove','introPreview','intro','introName');
+setupAudio('outroUploadBtn','outroFile','outroName','outroRemove','outroPreview','outro','outroName');
+
+// ── Timer Logic ──
+actionBtn.addEventListener('click', () => { if (state.running) stopSession(false); else startSession(); });
+
+async function startSession() {
+  state.running = true; state.elapsed = 0;
+  playIcon.style.display = 'none'; stopIcon.style.display = 'block';
+  actionBtn.classList.add('running'); durationSelector.style.display = 'none';
+
+  const prepSec = state.prepTime; // already seconds
+  const medSec = state.duration * 60;
+
+  if (prepSec > 0) {
+    state.phase = 'prep'; timerPhase.textContent = 'Vorbereitung';
+    $('timerProgress').classList.add('prep'); state.elapsed = 0;
+    await runTimer(prepSec, () => { timerTime.textContent = fmt(prepSec - state.elapsed); setProgress(state.elapsed / prepSec); });
+    if (!state.running) return;
+    $('timerProgress').classList.remove('prep');
+  }
+
+  state.phase = 'intro'; timerPhase.textContent = 'Intro';
+  setProgress(0); timerTime.textContent = fmt(medSec); timerSub.textContent = '';
+  await playAudioBuffer('intro');
+  if (!state.running) return;
+
+  state.phase = 'meditation'; timerPhase.textContent = 'Meditation';
+  document.querySelector('.timer-circle').classList.add('breathing');
+  state.elapsed = 0;
+  await runTimer(medSec, () => { timerTime.textContent = fmt(medSec - state.elapsed); setProgress(state.elapsed / medSec); });
+  document.querySelector('.timer-circle').classList.remove('breathing');
+  if (!state.running) return;
+
+  state.phase = 'outro'; timerPhase.textContent = 'Outro';
+  setProgress(1); timerTime.textContent = '00:00';
+  await playAudioBuffer('outro');
+  stopSession(true);
+}
+
+function runTimer(totalSec, onTick) {
+  return new Promise((resolve) => {
+    state.elapsed = 0; onTick();
+    state.intervalId = setInterval(() => {
+      if (!state.running) { clearInterval(state.intervalId); resolve(); return; }
+      state.elapsed++; onTick();
+      if (state.elapsed >= totalSec) { clearInterval(state.intervalId); resolve(); }
+    }, 1000);
+  });
+}
+
+function stopSession(completed) {
+  state.running = false; clearInterval(state.intervalId); stopCurrentAudio();
+  document.querySelector('.timer-circle').classList.remove('breathing');
+  $('timerProgress').classList.remove('prep');
+  playIcon.style.display = 'block'; stopIcon.style.display = 'none';
+  actionBtn.classList.remove('running'); durationSelector.style.display = '';
+  timerPhase.textContent = ''; timerSub.textContent = '';
+  setProgress(0); updateDurationDisplay();
+
+  if (completed || (state.phase === 'meditation' && state.elapsed > 30)) {
+    const actualMin = state.phase === 'meditation' ? state.elapsed / 60 : state.duration;
+    recordSession(actualMin);
+  }
+  state.phase = 'idle';
+}
+
+// ── Statistics ──
+function recordSession(durationMin) {
+  const stats = loadStats();
+  const today = new Date().toISOString().slice(0, 10);
+  stats.sessions.push({ date: today, duration: Math.round(durationMin * 100) / 100 });
+  if (!stats.dates.includes(today)) stats.dates.push(today);
+  saveStats(stats);
+}
+
+function renderStats() {
+  const stats = loadStats();
+  const sessions = stats.sessions;
+  const totalSessions = sessions.length + state.initSessions;
+  const totalMin = sessions.reduce((sum, s) => sum + s.duration, 0) + (state.initHours * 60) + state.initMinutes;
+  const avgMin = totalSessions > 0 ? totalMin / totalSessions : 0;
+  const longestMin = sessions.length > 0 ? Math.max(...sessions.map(s => s.duration)) : 0;
+
+  $('statSessions').textContent = totalSessions;
+  $('statTotal').innerHTML = fmtHM(totalMin);
+  $('statAvg').innerHTML = fmtHM(Math.round(avgMin));
+  $('statLongest').innerHTML = fmtHM(Math.round(longestMin));
+
+  const dates = [...new Set(sessions.map(s => s.date))].sort();
+  let currentStreak = 0, bestStreak = 0, streak = 0;
+
+  if (dates.length > 0) {
+    streak = 1;
+    for (let i = 1; i < dates.length; i++) {
+      const diff = (new Date(dates[i]) - new Date(dates[i-1])) / 86400000;
+      if (diff === 1) streak++; else { bestStreak = Math.max(bestStreak, streak); streak = 1; }
+    }
+    bestStreak = Math.max(bestStreak, streak);
+
+    const today = new Date().toISOString().slice(0,10);
+    const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+    const last = dates[dates.length-1];
+    if (last === today || last === yesterday) {
+      currentStreak = 1;
+      for (let i = dates.length-2; i >= 0; i--) {
+        if ((new Date(dates[i+1]) - new Date(dates[i])) / 86400000 === 1) currentStreak++; else break;
+      }
+    }
+  }
+  $('statCurrent').innerHTML = `${currentStreak}<span class="stat-unit">Tage</span>`;
+  $('statBest').innerHTML = `${bestStreak}<span class="stat-unit">Tage</span>`;
+}
+
+// ── Reset (double confirmation) ──
+$('resetStats').addEventListener('click', () => $('confirmOverlay').classList.add('visible'));
+$('confirmCancel').addEventListener('click', () => $('confirmOverlay').classList.remove('visible'));
+$('confirmDelete').addEventListener('click', () => {
+  $('confirmOverlay').classList.remove('visible');
+  saveStats({ sessions: [], dates: [] });
+  state.initSessions = 0; state.initHours = 0; state.initMinutes = 0;
+  $('initSessions').value = 0; $('initHours').value = 0; $('initMinutes').value = 0;
+  saveSettings();
+});
+
+// ── Export / Import ──
+$('exportBtn').addEventListener('click', () => {
+  const data = {
+    version: 1,
+    exportDate: new Date().toISOString(),
+    settings: JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'),
+    stats: loadStats()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `stillpoint-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showImportStatus('Backup exportiert', 'success');
+});
+
+$('importBtn').addEventListener('click', () => $('importFile').click());
+$('importFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.stats || !data.settings) throw new Error('Ungültiges Format');
+
+    // Restore settings
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
+    saveStats(data.stats);
+
+    // Reload state from storage
+    loadSettings();
+    state.duration = state.defaultDuration;
+    updateDurationDisplay();
+    $('prepValue').textContent = state.prepTime;
+    $('defaultDurValue').textContent = state.defaultDuration;
+    $('initSessions').value = state.initSessions;
+    $('initHours').value = state.initHours;
+    $('initMinutes').value = state.initMinutes;
+
+    if (state.introName) { $('introName').textContent = state.introName; $('introName').classList.remove('empty'); $('introRemove').classList.add('visible'); $('introPreview').classList.add('visible'); }
+    else { $('introName').textContent = 'Keine Datei'; $('introName').classList.add('empty'); $('introRemove').classList.remove('visible'); $('introPreview').classList.remove('visible'); }
+    if (state.outroName) { $('outroName').textContent = state.outroName; $('outroName').classList.remove('empty'); $('outroRemove').classList.add('visible'); $('outroPreview').classList.add('visible'); }
+    else { $('outroName').textContent = 'Keine Datei'; $('outroName').classList.add('empty'); $('outroRemove').classList.remove('visible'); $('outroPreview').classList.remove('visible'); }
+
+    showImportStatus('Backup erfolgreich importiert', 'success');
+  } catch (err) {
+    showImportStatus('Fehler: Ungültige Datei', 'error');
+  }
+  $('importFile').value = '';
+});
+
+function showImportStatus(msg, type) {
+  const el = $('importStatus');
+  el.textContent = msg;
+  el.className = 'import-status ' + type;
+  setTimeout(() => { el.textContent = ''; el.className = 'import-status'; }, 3000);
+}
+
+// ── Init ──
+loadSettings();
+state.duration = state.defaultDuration;
+updateDurationDisplay();
+$('prepValue').textContent = state.prepTime;
+$('defaultDurValue').textContent = state.defaultDuration;
+$('initSessions').value = state.initSessions;
+$('initHours').value = state.initHours;
+$('initMinutes').value = state.initMinutes;
+
+if (state.introName) { $('introName').textContent = state.introName; $('introName').classList.remove('empty'); $('introRemove').classList.add('visible'); $('introPreview').classList.add('visible'); }
+if (state.outroName) { $('outroName').textContent = state.outroName; $('outroName').classList.remove('empty'); $('outroRemove').classList.add('visible'); $('outroPreview').classList.add('visible'); }
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// Wake Lock
+let wakeLock = null;
+async function requestWakeLock() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {} }
+function releaseWakeLock() { if (wakeLock) { wakeLock.release(); wakeLock = null; } }
+const _startSession = startSession;
+startSession = async function() { await requestWakeLock(); await _startSession(); releaseWakeLock(); };
+</script>
+</body>
+</html>
