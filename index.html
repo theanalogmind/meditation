@@ -679,14 +679,22 @@ async function primeAudio(key) {
     const blob = new Blob([ab], { type: mime });
     const url = URL.createObjectURL(blob);
     const audio = new Audio();
-    audio.src = url;
     audio.preload = 'auto';
-    // Unlock audio on iOS by playing then immediately pausing
-    audio.volume = 0;
-    try { await audio.play(); } catch {}
-    audio.pause();
+    audio.muted = true;
+    audio.src = url;
+    // Wait for the audio to be ready
+    await new Promise((res) => {
+      audio.oncanplaythrough = res;
+      audio.onerror = res;
+      setTimeout(res, 2000); // fallback timeout
+    });
+    // Unlock on iOS: play muted, then immediately pause
+    try { 
+      await audio.play();
+      audio.pause();
+    } catch {}
     audio.currentTime = 0;
-    audio.volume = 1;
+    audio.muted = false;
     audio._blobUrl = url;
     return audio;
   } catch(e) { console.error('primeAudio error:', e); return null; }
@@ -806,6 +814,7 @@ async function startSession() {
 
   // Prime audio immediately during user gesture (iOS requirement)
   const introAudio = await primeAudio('intro');
+  await new Promise(r => setTimeout(r, 100));
   const outroAudio = await primeAudio('outro');
 
   const prepSec = state.prepTime; // already seconds
