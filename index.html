@@ -671,6 +671,32 @@ function playAudio(name) {
   });
 }
 
+// Pre-create an Audio element and unlock it during a user gesture (iOS)
+function createUnlockedAudio(name) {
+  const dataURL = loadAudioDataURL(getAudioKey(name));
+  if (!dataURL) return null;
+  const audio = new Audio(dataURL);
+  audio.preload = 'auto';
+  // iOS unlock: must call play() during user gesture stack
+  audio.play().then(() => {
+    audio.pause();
+    audio.currentTime = 0;
+  }).catch(() => {});
+  return audio;
+}
+
+// Play a pre-created unlocked audio element
+function playUnlockedAudio(audio) {
+  return new Promise((resolve) => {
+    if (!audio) { resolve(); return; }
+    state.currentAudio = audio;
+    audio.currentTime = 0;
+    audio.onended = () => { state.currentAudio = null; resolve(); };
+    audio.onerror = () => { state.currentAudio = null; resolve(); };
+    audio.play().catch(() => { state.currentAudio = null; resolve(); });
+  });
+}
+
 function stopCurrentAudio() { if (state.currentAudio) { state.currentAudio.pause(); state.currentAudio = null; } }
 
 // ── Format ──
@@ -767,6 +793,10 @@ async function startSession() {
   playIcon.style.display = 'none'; stopIcon.style.display = 'block';
   actionBtn.classList.add('running'); durationSelector.style.display = 'none';
 
+  // Create and unlock audio elements NOW (during user gesture)
+  const introAudio = createUnlockedAudio('intro');
+  const outroAudio = createUnlockedAudio('outro');
+
   const prepSec = state.prepTime;
   const medSec = state.duration * 60;
 
@@ -782,7 +812,7 @@ async function startSession() {
   // 2. Intro abspielen
   state.phase = 'intro'; timerPhase.textContent = 'Intro';
   setProgress(0); timerTime.textContent = fmt(medSec); timerSub.textContent = '';
-  await playAudio('intro');
+  await playUnlockedAudio(introAudio);
   if (!state.running) return;
 
   // 3. Meditation Timer
@@ -796,7 +826,7 @@ async function startSession() {
   // 4. Outro abspielen
   state.phase = 'outro'; timerPhase.textContent = 'Outro';
   setProgress(1); timerTime.textContent = '00:00';
-  await playAudio('outro');
+  await playUnlockedAudio(outroAudio);
   stopSession(true);
 }
 
