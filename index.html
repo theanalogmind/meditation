@@ -796,7 +796,8 @@ async function startSession() {
   playIcon.style.display = 'none'; stopIcon.style.display = 'block';
   actionBtn.classList.add('running'); durationSelector.style.display = 'none';
 
-  // Unlock the single audio player during this user gesture
+  // Keep screen on & unlock audio player
+  requestWakeLock();
   unlockPlayer();
 
   const prepSec = state.prepTime;
@@ -845,6 +846,7 @@ function runTimer(totalSec, onTick) {
 
 function stopSession(completed) {
   state.running = false; clearInterval(state.intervalId); stopCurrentAudio();
+  releaseWakeLock();
   document.querySelector('.timer-circle').classList.remove('breathing');
   $('timerProgress').classList.remove('prep');
   playIcon.style.display = 'block'; stopIcon.style.display = 'none';
@@ -998,8 +1000,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 let wakeLock = null;
 async function requestWakeLock() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {} }
 function releaseWakeLock() { if (wakeLock) { wakeLock.release(); wakeLock = null; } }
-const _startSession = startSession;
-startSession = async function() { await requestWakeLock(); await _startSession(); releaseWakeLock(); };
 </script>
 </body>
 </html>
