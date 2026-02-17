@@ -1,6 +1,6 @@
 {
-  "name": "Stillpoint",
-  "short_name": "Stillpoint",
+  "name": "Meditation",
+  "short_name": "Meditation",
   "description": "Meditation Timer",
   "start_url": "./index.html",
   "display": "standalone",
