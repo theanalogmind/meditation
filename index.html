@@ -629,67 +629,48 @@ function saveSettings() {
   }));
 }
 
-// ── Audio (IndexedDB) ──
-function openDB() {
+// ── Audio (Data URL in localStorage – simple & reliable) ──
+const INTRO_KEY = 'stillpoint_intro_dataurl';
+const OUTRO_KEY = 'stillpoint_outro_dataurl';
+
+function fileToDataURL(file) {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('StillpointAudio', 1);
-    req.onupgradeneeded = (e) => e.target.result.createObjectStore('audio');
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-async function storeAudio(key, ab, mimeType) {
-  const db = await openDB();
-  return new Promise((res, rej) => { const tx = db.transaction('audio','readwrite'); tx.objectStore('audio').put({data: ab, mime: mimeType}, key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
-}
-async function loadAudio(key) {
-  const db = await openDB();
-  return new Promise((res, rej) => { const tx = db.transaction('audio','readonly'); const r = tx.objectStore('audio').get(key); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error); });
-}
-async function deleteAudio(key) {
-  const db = await openDB();
-  return new Promise((res, rej) => { const tx = db.transaction('audio','readwrite'); tx.objectStore('audio').delete(key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
-}
-// ── Audio Playback (Web Audio API for iOS compatibility) ──
-let audioCtx = null;
-
-function getAudioContext() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
-}
-
-// Call this on user tap to unlock audio on iOS
-function unlockAudio() {
-  const ctx = getAudioContext();
-  if (ctx.state === 'suspended') ctx.resume();
-  // Create and play a silent buffer to fully unlock
-  const buf = ctx.createBuffer(1, 1, 22050);
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.connect(ctx.destination);
-  src.start(0);
-}
-
-function playAudioFromDB(key) {
-  return new Promise(async (resolve) => {
-    try {
-      const stored = await loadAudio(key);
-      if (!stored) { resolve(); return; }
-      const ab = stored.data || stored;
-      const mime = stored.mime || 'audio/mpeg';
-      const blob = new Blob([ab], { type: mime });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      state.currentAudio = audio;
-      audio.onended = () => { URL.revokeObjectURL(url); state.currentAudio = null; resolve(); };
-      audio.onerror = (e) => { console.error('Audio error:', e); URL.revokeObjectURL(url); state.currentAudio = null; resolve(); };
-      audio.play().catch((e) => { console.error('Play failed:', e); resolve(); });
-    } catch(e) { console.error('playAudio error:', e); resolve(); }
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
   });
 }
 
-// Preview button uses same function
-function playAudioBuffer(key) { return playAudioFromDB(key); }
+function storeAudioDataURL(key, dataURL) {
+  try { localStorage.setItem(key, dataURL); } catch(e) { console.error('Storage full:', e); alert('Datei zu groß für lokalen Speicher. Bitte eine kleinere Datei verwenden.'); }
+}
+
+function loadAudioDataURL(key) {
+  return localStorage.getItem(key);
+}
+
+function deleteAudioDataURL(key) {
+  localStorage.removeItem(key);
+}
+
+function getAudioKey(name) {
+  return name === 'intro' ? INTRO_KEY : OUTRO_KEY;
+}
+
+function playAudio(name) {
+  return new Promise((resolve) => {
+    const dataURL = loadAudioDataURL(getAudioKey(name));
+    if (!dataURL) { resolve(); return; }
+    const audio = new Audio(dataURL);
+    state.currentAudio = audio;
+    audio.onended = () => { state.currentAudio = null; resolve(); };
+    audio.onerror = (e) => { console.error('Audio error:', e); state.currentAudio = null; resolve(); };
+    const playPromise = audio.play();
+    if (playPromise) playPromise.catch((e) => { console.error('Play failed:', e); state.currentAudio = null; resolve(); });
+  });
+}
+
 function stopCurrentAudio() { if (state.currentAudio) { state.currentAudio.pause(); state.currentAudio = null; } }
 
 // ── Format ──
@@ -760,19 +741,20 @@ $('initHours').addEventListener('change', () => { state.initHours = Math.max(0, 
 $('initMinutes').addEventListener('change', () => { state.initMinutes = Math.max(0, Math.min(59, parseInt($('initMinutes').value) || 0)); $('initMinutes').value = state.initMinutes; saveSettings(); });
 
 // ── Audio Upload ──
-function setupAudio(upBtn, fileIn, nameEl, rmBtn, preBtn, key, field) {
+function setupAudio(upBtn, fileIn, nameEl, rmBtn, preBtn, name, field) {
   $(upBtn).addEventListener('click', () => $(fileIn).click());
   $(fileIn).addEventListener('change', async (e) => {
     const file = e.target.files[0]; if (!file) return;
-    await storeAudio(key, await file.arrayBuffer(), file.type || 'audio/mpeg');
+    const dataURL = await fileToDataURL(file);
+    storeAudioDataURL(getAudioKey(name), dataURL);
     state[field] = file.name; $(nameEl).textContent = file.name; $(nameEl).classList.remove('empty');
     $(rmBtn).classList.add('visible'); $(preBtn).classList.add('visible'); saveSettings();
   });
-  $(rmBtn).addEventListener('click', async () => {
-    await deleteAudio(key); state[field] = ''; $(nameEl).textContent = 'Keine Datei'; $(nameEl).classList.add('empty');
+  $(rmBtn).addEventListener('click', () => {
+    deleteAudioDataURL(getAudioKey(name)); state[field] = ''; $(nameEl).textContent = 'Keine Datei'; $(nameEl).classList.add('empty');
     $(rmBtn).classList.remove('visible'); $(preBtn).classList.remove('visible'); $(fileIn).value = ''; saveSettings();
   });
-  $(preBtn).addEventListener('click', () => playAudioBuffer(key));
+  $(preBtn).addEventListener('click', () => playAudio(name));
 }
 setupAudio('introUploadBtn','introFile','introName','introRemove','introPreview','intro','introName');
 setupAudio('outroUploadBtn','outroFile','outroName','outroRemove','outroPreview','outro','outroName');
@@ -785,10 +767,7 @@ async function startSession() {
   playIcon.style.display = 'none'; stopIcon.style.display = 'block';
   actionBtn.classList.add('running'); durationSelector.style.display = 'none';
 
-  // Unlock audio context on iOS (must happen during user gesture)
-  unlockAudio();
-
-  const prepSec = state.prepTime; // already seconds
+  const prepSec = state.prepTime;
   const medSec = state.duration * 60;
 
   // 1. Vorbereitungszeit
@@ -803,7 +782,7 @@ async function startSession() {
   // 2. Intro abspielen
   state.phase = 'intro'; timerPhase.textContent = 'Intro';
   setProgress(0); timerTime.textContent = fmt(medSec); timerSub.textContent = '';
-  await playAudioFromDB('intro');
+  await playAudio('intro');
   if (!state.running) return;
 
   // 3. Meditation Timer
@@ -817,7 +796,7 @@ async function startSession() {
   // 4. Outro abspielen
   state.phase = 'outro'; timerPhase.textContent = 'Outro';
   setProgress(1); timerTime.textContent = '00:00';
-  await playAudioFromDB('outro');
+  await playAudio('outro');
   stopSession(true);
 }
 
