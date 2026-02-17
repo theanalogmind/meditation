@@ -697,7 +697,11 @@ function playUnlockedAudio(audio) {
   });
 }
 
-function stopCurrentAudio() { if (state.currentAudio) { state.currentAudio.pause(); state.currentAudio = null; } }
+function stopCurrentAudio() {
+  if (state.currentAudio) { state.currentAudio.pause(); state.currentAudio.currentTime = 0; state.currentAudio = null; }
+  if (state.introAudioEl) { state.introAudioEl.pause(); state.introAudioEl.currentTime = 0; state.introAudioEl = null; }
+  if (state.outroAudioEl) { state.outroAudioEl.pause(); state.outroAudioEl.currentTime = 0; state.outroAudioEl = null; }
+}
 
 // ── Format ──
 function fmt(totalSec) {
@@ -794,8 +798,8 @@ async function startSession() {
   actionBtn.classList.add('running'); durationSelector.style.display = 'none';
 
   // Create and unlock audio elements NOW (during user gesture)
-  const introAudio = createUnlockedAudio('intro');
-  const outroAudio = createUnlockedAudio('outro');
+  state.introAudioEl = createUnlockedAudio('intro');
+  state.outroAudioEl = createUnlockedAudio('outro');
 
   const prepSec = state.prepTime;
   const medSec = state.duration * 60;
@@ -812,7 +816,7 @@ async function startSession() {
   // 2. Intro abspielen
   state.phase = 'intro'; timerPhase.textContent = 'Intro';
   setProgress(0); timerTime.textContent = fmt(medSec); timerSub.textContent = '';
-  await playUnlockedAudio(introAudio);
+  await playUnlockedAudio(state.introAudioEl);
   if (!state.running) return;
 
   // 3. Meditation Timer
@@ -826,7 +830,7 @@ async function startSession() {
   // 4. Outro abspielen
   state.phase = 'outro'; timerPhase.textContent = 'Outro';
   setProgress(1); timerTime.textContent = '00:00';
-  await playUnlockedAudio(outroAudio);
+  await playUnlockedAudio(state.outroAudioEl);
   stopSession(true);
 }
 
