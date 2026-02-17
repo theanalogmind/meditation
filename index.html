@@ -677,11 +677,14 @@ function createUnlockedAudio(name) {
   if (!dataURL) return null;
   const audio = new Audio(dataURL);
   audio.preload = 'auto';
-  // iOS unlock: must call play() during user gesture stack
+  audio.muted = true;
   audio.play().then(() => {
     audio.pause();
     audio.currentTime = 0;
-  }).catch(() => {});
+    audio.muted = false;
+  }).catch(() => {
+    audio.muted = false;
+  });
   return audio;
 }
 
@@ -690,6 +693,7 @@ function playUnlockedAudio(audio) {
   return new Promise((resolve) => {
     if (!audio) { resolve(); return; }
     state.currentAudio = audio;
+    audio.muted = false;
     audio.currentTime = 0;
     audio.onended = () => { state.currentAudio = null; resolve(); };
     audio.onerror = () => { state.currentAudio = null; resolve(); };
