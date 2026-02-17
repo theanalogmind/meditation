@@ -650,12 +650,31 @@ async function deleteAudio(key) {
   const db = await openDB();
   return new Promise((res, rej) => { const tx = db.transaction('audio','readwrite'); tx.objectStore('audio').delete(key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
 }
-function playAudioBuffer(key) {
+// ── Audio Playback (Web Audio API for iOS compatibility) ──
+let audioCtx = null;
+
+function getAudioContext() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+// Call this on user tap to unlock audio on iOS
+function unlockAudio() {
+  const ctx = getAudioContext();
+  if (ctx.state === 'suspended') ctx.resume();
+  // Create and play a silent buffer to fully unlock
+  const buf = ctx.createBuffer(1, 1, 22050);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start(0);
+}
+
+function playAudioFromDB(key) {
   return new Promise(async (resolve) => {
     try {
       const stored = await loadAudio(key);
       if (!stored) { resolve(); return; }
-      // Support both old format (raw ArrayBuffer) and new format ({data, mime})
       const ab = stored.data || stored;
       const mime = stored.mime || 'audio/mpeg';
       const blob = new Blob([ab], { type: mime });
@@ -665,58 +684,12 @@ function playAudioBuffer(key) {
       audio.onended = () => { URL.revokeObjectURL(url); state.currentAudio = null; resolve(); };
       audio.onerror = (e) => { console.error('Audio error:', e); URL.revokeObjectURL(url); state.currentAudio = null; resolve(); };
       audio.play().catch((e) => { console.error('Play failed:', e); resolve(); });
-    } catch(e) { console.error('playAudioBuffer error:', e); resolve(); }
+    } catch(e) { console.error('playAudio error:', e); resolve(); }
   });
 }
 
-// iOS requires audio to be primed during a user gesture.
-async function primeAudio(key) {
-  try {
-    const stored = await loadAudio(key);
-    if (!stored) return null;
-    const ab = stored.data || stored;
-    const mime = stored.mime || 'audio/mpeg';
-    const blob = new Blob([ab], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio();
-    audio.preload = 'auto';
-    audio.muted = true;
-    audio.src = url;
-    // Wait for the audio to be ready
-    await new Promise((res) => {
-      audio.oncanplaythrough = res;
-      audio.onerror = res;
-      setTimeout(res, 2000); // fallback timeout
-    });
-    // Unlock on iOS: play muted, then immediately pause
-    try { 
-      await audio.play();
-      audio.pause();
-    } catch {}
-    audio.currentTime = 0;
-    audio.muted = false;
-    audio._blobUrl = url;
-    return audio;
-  } catch(e) { console.error('primeAudio error:', e); return null; }
-}
-
-function playPrimedAudio(audio) {
-  return new Promise((resolve) => {
-    if (!audio) { resolve(); return; }
-    state.currentAudio = audio;
-    audio.onended = () => { 
-      if (audio._blobUrl) URL.revokeObjectURL(audio._blobUrl);
-      state.currentAudio = null; 
-      resolve(); 
-    };
-    audio.onerror = () => { 
-      if (audio._blobUrl) URL.revokeObjectURL(audio._blobUrl);
-      state.currentAudio = null; 
-      resolve(); 
-    };
-    audio.play().catch(() => resolve());
-  });
-}
+// Preview button uses same function
+function playAudioBuffer(key) { return playAudioFromDB(key); }
 function stopCurrentAudio() { if (state.currentAudio) { state.currentAudio.pause(); state.currentAudio = null; } }
 
 // ── Format ──
@@ -812,14 +785,13 @@ async function startSession() {
   playIcon.style.display = 'none'; stopIcon.style.display = 'block';
   actionBtn.classList.add('running'); durationSelector.style.display = 'none';
 
-  // Prime audio immediately during user gesture (iOS requirement)
-  const introAudio = await primeAudio('intro');
-  await new Promise(r => setTimeout(r, 100));
-  const outroAudio = await primeAudio('outro');
+  // Unlock audio context on iOS (must happen during user gesture)
+  unlockAudio();
 
   const prepSec = state.prepTime; // already seconds
   const medSec = state.duration * 60;
 
+  // 1. Vorbereitungszeit
   if (prepSec > 0) {
     state.phase = 'prep'; timerPhase.textContent = 'Vorbereitung';
     $('timerProgress').classList.add('prep'); state.elapsed = 0;
@@ -828,11 +800,13 @@ async function startSession() {
     $('timerProgress').classList.remove('prep');
   }
 
+  // 2. Intro abspielen
   state.phase = 'intro'; timerPhase.textContent = 'Intro';
   setProgress(0); timerTime.textContent = fmt(medSec); timerSub.textContent = '';
-  await playPrimedAudio(introAudio);
+  await playAudioFromDB('intro');
   if (!state.running) return;
 
+  // 3. Meditation Timer
   state.phase = 'meditation'; timerPhase.textContent = 'Meditation';
   document.querySelector('.timer-circle').classList.add('breathing');
   state.elapsed = 0;
@@ -840,9 +814,10 @@ async function startSession() {
   document.querySelector('.timer-circle').classList.remove('breathing');
   if (!state.running) return;
 
+  // 4. Outro abspielen
   state.phase = 'outro'; timerPhase.textContent = 'Outro';
   setProgress(1); timerTime.textContent = '00:00';
-  await playPrimedAudio(outroAudio);
+  await playAudioFromDB('outro');
   stopSession(true);
 }
 
