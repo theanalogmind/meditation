@@ -996,10 +996,44 @@ if (state.outroName) { $('outroName').textContent = state.outroName; $('outroNam
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 
-// Wake Lock
-let wakeLock = null;
-async function requestWakeLock() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {} }
-function releaseWakeLock() { if (wakeLock) { wakeLock.release(); wakeLock = null; } }
+// ── Screen Wake (NoSleep technique – tiny silent video loop for iOS) ──
+const _noSleepVideo = document.createElement('video');
+_noSleepVideo.setAttribute('playsinline', '');
+_noSleepVideo.setAttribute('muted', '');
+_noSleepVideo.muted = true;
+_noSleepVideo.loop = true;
+_noSleepVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;';
+// Minimal MP4 (1x1 black pixel, ~200 bytes) as base64 data URL
+_noSleepVideo.src = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVlAAAAvW1kYXQAAABTbW9vdgAAAGxtdmhkAAAAANLEP5bSxD+XAAAD6AAAACgAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAABhpb2RzAAAAABCAgIAQAAAE////AAACF21pYQAAAAAAAAAAAAAAAAAAAADhmWRpYWMAAABEbWRoZAAAAADSxD+W0sQ/lwAAA+gAAAAoVcQAAAAAAC1oZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAAghtaW5mAAAAFHZtaGQAAAABAAAAAAAAAAAAAAAkZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAHMc3RibAAAAKhzdHNkAAAAAAAAAAEAAACYYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAEAAQAASAAAAEgAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADZhdmNDAWQAH//hABpnZAAfrsBIAAADAAEAAAMAAsPFi2WAAAGEAAABkAyQgAAAABhzdHRzAAAAAAAAAAEAAAABAAAAKAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAABAAAAAQAAABRzdHN6AAAAAAAAABIAAAABAAAAFHN0Y28AAAAAAAAAAQAAAAwAAABidWR0YQAAAFptZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAAC1pbHN0AAAAJaN0b28AAAAdZGF0YQAAAAEAAAAATGF2ZjU4LjI5LjEwMA==';
+document.body.appendChild(_noSleepVideo);
+
+let _noSleepEnabled = false;
+
+function requestWakeLock() {
+  if (!_noSleepEnabled) {
+    _noSleepVideo.play().then(() => { _noSleepEnabled = true; }).catch(() => {});
+  }
+  // Also try native Wake Lock API as bonus
+  try {
+    if ('wakeLock' in navigator) {
+      navigator.wakeLock.request('screen').catch(() => {});
+    }
+  } catch {}
+}
+
+function releaseWakeLock() {
+  if (_noSleepEnabled) {
+    _noSleepVideo.pause();
+    _noSleepEnabled = false;
+  }
+}
+
+// Re-acquire native wake lock if page becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.running) {
+    requestWakeLock();
+  }
+});
 </script>
 </body>
 </html>
