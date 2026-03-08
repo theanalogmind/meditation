@@ -789,7 +789,15 @@ setupAudio('introUploadBtn','introFile','introName','introRemove','introPreview'
 setupAudio('outroUploadBtn','outroFile','outroName','outroRemove','outroPreview','outro','outroName');
 
 // ── Timer Logic ──
-actionBtn.addEventListener('click', () => { if (state.running) stopSession(false); else startSession(); });
+actionBtn.addEventListener('click', () => {
+  if (state.running) {
+    stopSession(false);
+  } else {
+    // noSleep video MUSS direkt im Click-Handler starten – vor jedem await
+    _noSleepVideo.play().then(() => { _noSleepEnabled = true; }).catch(() => {});
+    startSession();
+  }
+});
 
 async function startSession() {
   state.running = true; state.elapsed = 0;
@@ -797,7 +805,6 @@ async function startSession() {
   actionBtn.classList.add('running'); durationSelector.style.display = 'none';
 
   // Keep screen on & unlock audio player
-  requestWakeLock();
   unlockPlayer();
 
   const prepSec = state.prepTime;
