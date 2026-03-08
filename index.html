@@ -825,33 +825,96 @@ async function startSession() {
   await playViaPlayer('intro');
   if (!state.running) return;
 
-  // 3. Meditation Timer
+  // 3. Meditation Timer + Outro via Web Audio (iOS-resistent)
   state.phase = 'meditation'; timerPhase.textContent = 'Meditation';
   document.querySelector('.timer-circle').classList.add('breathing');
   state.elapsed = 0;
-  await runTimer(medSec, () => { timerTime.textContent = fmt(medSec - state.elapsed); setProgress(state.elapsed / medSec); });
-  document.querySelector('.timer-circle').classList.remove('breathing');
-  if (!state.running) return;
 
-  // 4. Outro abspielen
-  state.phase = 'outro'; timerPhase.textContent = 'Outro';
-  setProgress(1); timerTime.textContent = '00:00';
-  await playViaPlayer('outro');
-  stopSession(true);
+  // Outro direkt in Web Audio einplanen – laeuft auch wenn iOS JS einfriert
+  await scheduleOutroAndMeditate(medSec);
+
+  document.querySelector('.timer-circle').classList.remove('breathing');
+  stopSession(true, medSec / 60);
+}
+
+async function scheduleOutroAndMeditate(medSec) {
+  return new Promise(async (resolve) => {
+    // Outro-Audio als ArrayBuffer laden
+    const outroDataURL = loadAudioDataURL(getAudioKey('outro'));
+    let audioCtx = null;
+    let scheduledSource = null;
+
+    if (outroDataURL) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // DataURL -> ArrayBuffer -> AudioBuffer
+        const base64 = outroDataURL.split(',')[1];
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const arrayBuffer = bytes.buffer;
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+        // Outro genau nach medSec Sekunden einplanen (relativ zur AudioContext-Zeit)
+        scheduledSource = audioCtx.createBufferSource();
+        scheduledSource.buffer = audioBuffer;
+        scheduledSource.connect(audioCtx.destination);
+        scheduledSource.start(audioCtx.currentTime + medSec);
+        scheduledSource.onended = () => {
+          audioCtx.close();
+          resolve();
+        };
+      } catch(e) {
+        console.error('Web Audio schedule failed:', e);
+        audioCtx = null;
+      }
+    }
+
+    // Parallel: UI-Timer (zeigt Zeit an solange Bildschirm an ist)
+    const medStartTime = Date.now();
+    state.intervalId = setInterval(() => {
+      if (!state.running) {
+        clearInterval(state.intervalId);
+        if (scheduledSource) { try { scheduledSource.stop(); } catch(e) {} }
+        if (audioCtx) audioCtx.close();
+        resolve();
+        return;
+      }
+      state.elapsed = Math.floor((Date.now() - medStartTime) / 1000);
+      timerTime.textContent = fmt(medSec - state.elapsed);
+      setProgress(state.elapsed / medSec);
+      if (state.elapsed >= medSec && !scheduledSource) {
+        // Kein Outro geplant: direkt beenden
+        clearInterval(state.intervalId);
+        resolve();
+      }
+    }, 500);
+
+    // Fallback wenn kein Outro: nach medSec resolve
+    if (!outroDataURL) {
+      setTimeout(() => {
+        clearInterval(state.intervalId);
+        resolve();
+      }, medSec * 1000);
+    }
+  });
 }
 
 function runTimer(totalSec, onTick) {
   return new Promise((resolve) => {
+    const startTime = Date.now();
     state.elapsed = 0; onTick();
     state.intervalId = setInterval(() => {
       if (!state.running) { clearInterval(state.intervalId); resolve(); return; }
-      state.elapsed++; onTick();
+      // Timestamp-basiert: echte vergangene Zeit, ueberlebt iOS-Freeze
+      state.elapsed = Math.floor((Date.now() - startTime) / 1000);
+      onTick();
       if (state.elapsed >= totalSec) { clearInterval(state.intervalId); resolve(); }
-    }, 1000);
+    }, 500);
   });
 }
 
-function stopSession(completed) {
+function stopSession(completed, actualMinutes) {
   state.running = false; clearInterval(state.intervalId); stopCurrentAudio();
   releaseWakeLock();
   document.querySelector('.timer-circle').classList.remove('breathing');
@@ -861,9 +924,12 @@ function stopSession(completed) {
   timerPhase.textContent = ''; timerSub.textContent = '';
   setProgress(0); updateDurationDisplay();
 
-  if (completed || (state.phase === 'meditation' && state.elapsed > 30)) {
-    const actualMin = state.phase === 'meditation' ? state.elapsed / 60 : state.duration;
-    recordSession(actualMin);
+  if (completed && actualMinutes) {
+    // Exakte Dauer wurde übergeben
+    recordSession(actualMinutes);
+  } else if (!completed && (state.phase === 'meditation' && state.elapsed > 30)) {
+    // Manuell gestoppt während Meditation: tatsächlich verstrichene Zeit
+    recordSession(state.elapsed / 60);
   }
   state.phase = 'idle';
 }
